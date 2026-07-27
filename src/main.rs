@@ -61,10 +61,14 @@ const CHECKS: &[Check] = &[
     Check { id: "cpp-memory-leak", severity: "error", desc: "new without matching delete" },
     Check { id: "cpp-null-deref", severity: "warning", desc: "pointer deref without null check" },
     Check { id: "cpp-use-after-delete", severity: "warning", desc: "using pointer after delete" },
+    Check { id: "cpp-array-delete", severity: "error", desc: "new[] with scalar delete" },
     Check { id: "cpp-cstyle-cast", severity: "warning", desc: "C-style cast — type-unsafe" },
     Check { id: "cpp-empty-catch", severity: "warning", desc: "empty catch swallows exceptions" },
     Check { id: "cpp-destructor-throw", severity: "error", desc: "destructor throw → terminate()" },
+    Check { id: "cpp-format-string", severity: "error", desc: "printf with variable format string" },
+    Check { id: "cpp-path-traversal", severity: "warning", desc: "unsanitized path concatenation" },
     Check { id: "cpp-sensitive-print", severity: "warning", desc: "sensitive data in logs" },
+    Check { id: "cpp-sensitive-clear", severity: "warning", desc: "sensitive data freed without zeroing" },
     Check { id: "cpp-delete-check", severity: "info", desc: "delete without nullptr assignment" },
 ];
 

@@ -1,6 +1,7 @@
 use crate::checks::{
-    check_cstyle_cast, check_delete_no_null, check_destructor_throw, check_empty_catch,
-    check_memory_leak, check_null_deref, check_use_after_delete,
+    check_array_delete, check_cstyle_cast, check_delete_no_null, check_destructor_throw,
+    check_empty_catch, check_format_string, check_memory_leak, check_null_deref,
+    check_path_traversal, check_sensitive_clear, check_use_after_delete,
 };
 use crate::report::{Issue, Report, Severity};
 use anyhow::Result;
@@ -355,6 +356,18 @@ impl Scanner {
         // 8. Delete without array form
         issues.extend(check_delete_no_null(info));
 
+        // 9. Array new[] with scalar delete
+        issues.extend(check_array_delete(info));
+
+        // 10. Format string vulnerability
+        issues.extend(check_format_string(info));
+
+        // 11. Path traversal
+        issues.extend(check_path_traversal(info));
+
+        // 12. Sensitive data not cleared
+        issues.extend(check_sensitive_clear(info));
+
         issues
     }
 
@@ -386,14 +399,25 @@ impl Scanner {
     }
 
     fn find_var_in_assignment(&self, node: tree_sitter::Node, src: &[u8]) -> String {
+        // Recursively find the first identifier in a subtree
+        fn find_ident(node: tree_sitter::Node, src: &[u8]) -> Option<String> {
+            if node.kind() == "identifier" || node.kind() == "field_identifier" {
+                return Some(node.utf8_text(src).unwrap_or("").to_string());
+            }
+            let mut cursor = node.walk();
+            for child in node.named_children(&mut cursor) {
+                if let Some(name) = find_ident(child, src) {
+                    return Some(name);
+                }
+            }
+            None
+        }
+
         let mut parent = node.parent();
         while let Some(p) = parent {
-            if p.kind() == "assignment_expression" || p.kind() == "init_declarator" {
-                let mut cursor = p.walk();
-                for child in p.named_children(&mut cursor) {
-                    if child.kind() == "identifier" || child.kind() == "field_identifier" {
-                        return child.utf8_text(src).unwrap_or("").to_string();
-                    }
+            if matches!(p.kind(), "assignment_expression" | "init_declarator" | "declaration") {
+                if let Some(name) = find_ident(p, src) {
+                    return name;
                 }
             }
             parent = p.parent();

@@ -73,10 +73,14 @@ fn handle_tool_call(id: Option<Value>, params: Option<Value>, scanner: &Mutex<Sc
                 {"id":"cpp-memory-leak","severity":"error","desc":"new without matching delete"},
                 {"id":"cpp-null-deref","severity":"warning","desc":"pointer deref without null check"},
                 {"id":"cpp-use-after-delete","severity":"warning","desc":"using pointer after delete without reset to nullptr"},
+                {"id":"cpp-array-delete","severity":"error","desc":"new[] with scalar delete — UB"},
                 {"id":"cpp-cstyle-cast","severity":"warning","desc":"C-style cast — type-unsafe"},
                 {"id":"cpp-empty-catch","severity":"warning","desc":"empty catch block swallowing exceptions"},
                 {"id":"cpp-destructor-throw","severity":"error","desc":"destructor contains throw — calls terminate()"},
+                {"id":"cpp-format-string","severity":"error","desc":"printf with variable format string — format string vulnerability"},
+                {"id":"cpp-path-traversal","severity":"warning","desc":"unsanitized path concatenation"},
                 {"id":"cpp-sensitive-print","severity":"warning","desc":"sensitive data in print/debug output"},
+                {"id":"cpp-sensitive-clear","severity":"warning","desc":"sensitive data freed without zeroing"},
                 {"id":"cpp-delete-check","severity":"info","desc":"delete usage without nullptr assignment"}
             ]});
             json!({"jsonrpc":"2.0","result":{"content":[{"type":"text","text":serde_json::to_string_pretty(&checks).unwrap_or_default()}]},"id":id})
