@@ -1,7 +1,8 @@
 use crate::checks::{
     check_array_delete, check_cstyle_cast, check_delete_no_null, check_destructor_throw,
-    check_empty_catch, check_format_string, check_memory_leak, check_null_deref,
-    check_path_traversal, check_sensitive_clear, check_use_after_delete,
+    check_empty_catch, check_format_string, check_memory_leak, check_nothrow_unchecked,
+    check_null_deref, check_path_traversal, check_sensitive_clear, check_unsafe_c_func,
+    check_use_after_delete,
 };
 use crate::report::{Issue, Report, Severity};
 use anyhow::Result;
@@ -44,6 +45,7 @@ pub struct AllocSite {
     pub var_name: String,
     pub func_name: String,
     pub is_array: bool,
+    pub is_nothrow: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -191,11 +193,13 @@ impl Scanner {
 
             "new_expression" => {
                 let var = self.find_var_in_assignment(node, src);
+                let text = node.utf8_text(src).unwrap_or("");
                 info.allocations.push(AllocSite {
                     line,
                     var_name: var,
                     func_name: func_name.clone(),
-                    is_array: node.utf8_text(src).unwrap_or("").contains('['),
+                    is_array: text.contains('['),
+                    is_nothrow: text.contains("nothrow"),
                 });
             }
 
@@ -379,6 +383,12 @@ impl Scanner {
 
         // 12. Sensitive data not cleared
         issues.extend(check_sensitive_clear(info));
+
+        // 13. nothrow new without null check
+        issues.extend(check_nothrow_unchecked(info));
+
+        // 14. Unsafe C functions in C++ code
+        issues.extend(check_unsafe_c_func(info));
 
         issues
     }

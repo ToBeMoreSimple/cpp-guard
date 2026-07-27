@@ -69,6 +69,8 @@ const CHECKS: &[Check] = &[
     Check { id: "cpp-path-traversal", severity: "warning", desc: "unsanitized path concatenation" },
     Check { id: "cpp-sensitive-print", severity: "warning", desc: "sensitive data in logs" },
     Check { id: "cpp-sensitive-clear", severity: "warning", desc: "sensitive data freed without zeroing" },
+    Check { id: "cpp-nothrow-unchecked", severity: "error", desc: "new(nothrow) without null check" },
+    Check { id: "cpp-unsafe-c-func", severity: "warning", desc: "unsafe C functions (strcpy/malloc) in C++" },
     Check { id: "cpp-delete-check", severity: "info", desc: "delete without nullptr assignment" },
 ];
 
