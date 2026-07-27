@@ -182,6 +182,13 @@ impl Scanner {
                 }
             }
 
+            "class_specifier" => {
+                let name = node.child_by_field_name("name")
+                    .map(|n| n.utf8_text(src).unwrap_or("").to_string())
+                    .unwrap_or_default();
+                info.classes.push(ClassInfo { name, line });
+            }
+
             "new_expression" => {
                 let var = self.find_var_in_assignment(node, src);
                 info.allocations.push(AllocSite {
@@ -216,14 +223,19 @@ impl Scanner {
                 let text = node.utf8_text(src).unwrap_or("");
                 if text.contains("->") || text.contains("(*") {
                     let var = text.split("->").next().unwrap_or(&text).to_string();
-                    let has_null = info.null_checks.contains(&line)
-                        || self.preceding_lines_have_null_check(line, &info.source);
-                    info.pointer_derefs.push(PtrDeref {
-                        line,
-                        var_name: var,
-                        func_name: func_name.clone(),
-                        has_null_check: has_null,
-                    });
+                    // Skip `this->` dereferences — always valid in member functions
+                    if var.trim() == "this" || var.contains("this") {
+                        // skip, don't flag
+                    } else {
+                        let has_null = info.null_checks.contains(&line)
+                            || self.preceding_lines_have_null_check(line, &info.source);
+                        info.pointer_derefs.push(PtrDeref {
+                            line,
+                            var_name: var,
+                            func_name: func_name.clone(),
+                            has_null_check: has_null,
+                        });
+                    }
                 }
             }
 

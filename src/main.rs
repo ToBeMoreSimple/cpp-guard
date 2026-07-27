@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
 struct Check { id: &'static str, severity: &'static str, desc: &'static str }
 const CHECKS: &[Check] = &[
     Check { id: "cpp-memory-leak", severity: "error", desc: "new without matching delete" },
-    Check { id: "cpp-null-deref", severity: "warning", desc: "pointer deref without null check" },
+    Check { id: "cpp-null-deref", severity: "info", desc: "pointer deref — may be false positive for non-raw ptrs" },
     Check { id: "cpp-use-after-delete", severity: "warning", desc: "using pointer after delete" },
     Check { id: "cpp-array-delete", severity: "error", desc: "new[] with scalar delete" },
     Check { id: "cpp-cstyle-cast", severity: "warning", desc: "C-style cast — type-unsafe" },

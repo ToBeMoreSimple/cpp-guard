@@ -3,78 +3,89 @@ use crate::scanner::FileInfo;
 
 /// Detect sensitive buffers (password, key, token) that are freed
 /// without being securely zeroed first.
+/// Only flags when the variable is actively used with sensitive data input APIs.
 pub fn check_sensitive_clear(info: &FileInfo) -> Vec<Issue> {
     let mut issues = Vec::new();
     let src = &info.source;
 
-    // Find variables named like password/key/token/secret
-    let sensitive_vars: Vec<(usize, String)> = src.lines()
+    // Sensitive input APIs
+    let input_apis = [
+        "getpass", "read_password", "GetPassword", "ReadPassword",
+        "get_secret", "GetSecret", "ReadSecret", "decrypt",
+        "Decrypt", "generate_key", "GenerateKey", "derive_key", "DeriveKey",
+        "import_key", "ImportKey", "get_token", "GetToken",
+    ];
+
+    // Find variables that interact with sensitive APIs
+    let sensitive_lines: Vec<usize> = src.lines()
         .enumerate()
         .filter_map(|(i, line)| {
-            let trimmed = line.trim();
-            if trimmed.starts_with("//") || trimmed.is_empty() { return None; }
-
-            let lower = trimmed.to_lowercase();
-            if lower.contains("password") || lower.contains("secret")
-                || lower.contains("token") || lower.contains("private_key")
-                || lower.contains("api_key")
-            {
-                // Extract variable name
-                for kw in &["password", "secret", "token", "private_key", "api_key"] {
-                    if let Some(pos) = lower.find(kw) {
-                        let var = &trimmed[pos..];
-                        let name = var.split(|c: char| !c.is_alphanumeric() && c != '_')
-                            .next().unwrap_or(var);
-                        return Some((i + 1, name.to_string()));
-                    }
+            let lower = line.to_lowercase();
+            for api in &input_apis {
+                if lower.contains(&api.to_lowercase()) {
+                    return Some(i + 1);
                 }
             }
             None
         })
         .collect();
 
-    // Check if these vars have a corresponding memset/secure_zero before free/delete
-    for (line_num, var_name) in &sensitive_vars {
-        let mut has_clear = false;
-        let mut has_delete = false;
+    if sensitive_lines.is_empty() {
+        return issues;
+    }
 
-        for (i, line) in src.lines().enumerate() {
-            let ln = i + 1;
-            if ln < *line_num { continue; }
+    // Find variables named like password/key/token/secret
+    let var_patterns = ["password", "secret", "token", "key", "credential", "pin", "pwd"];
 
-            let lt = line.to_lowercase();
-            if (lt.contains("delete") || lt.contains("free("))
-                && lt.contains(&var_name.to_lowercase())
-            {
-                has_delete = true;
+    for (i, line) in src.lines().enumerate() {
+        let line_num = i + 1;
+        let lower = line.to_lowercase();
+
+        // Only check lines near sensitive API usage (within 20 lines)
+        let near_sensitive = sensitive_lines.iter().any(|&sl| {
+            (sl as isize - line_num as isize).abs() <= 20
+        });
+        if !near_sensitive { continue; }
+
+        // Check if this line frees/deletes a sensitive variable
+        let has_delete = lower.contains("delete") || lower.contains("free(");
+        if !has_delete { continue; }
+
+        // Check if variable name matches and no memset precedes
+        for vp in &var_patterns {
+            if lower.contains(vp) {
+                // Check preceding lines for memset/secure_zero
+                let mut has_clear = false;
+                let start = if line_num > 5 { line_num - 5 } else { 0 };
+                for l in src.lines().skip(start).take(10) {
+                    let lt = l.to_lowercase();
+                    if lt.contains("memset") || lt.contains("secure_zero")
+                        || lt.contains("explicit_bzero") || lt.contains("fill(")
+                    {
+                        has_clear = true;
+                        break;
+                    }
+                }
+
+                if !has_clear {
+                    issues.push(Issue {
+                        severity: Severity::Warning,
+                        check: "cpp-sensitive-clear",
+                        file: info.path.clone(),
+                        line: line_num,
+                        column: 1,
+                        message: format!(
+                            "sensitive data freed at line {} without being securely zeroed — residual data may remain in memory",
+                            line_num
+                        ),
+                        suggestion: Some(
+                            "Use `memset(ptr, 0, size)` or `SecureZeroMemory` before freeing sensitive buffers."
+                                .to_string(),
+                        ),
+                    });
+                }
+                break;
             }
-            if (lt.contains("memset") || lt.contains("secure_zero")
-                || lt.contains("explicit_bzero") || lt.contains("fill("))
-                && lt.contains(&var_name.to_lowercase())
-            {
-                has_clear = true;
-            }
-        }
-
-        if has_delete && !has_clear {
-            issues.push(Issue {
-                severity: Severity::Warning,
-                check: "cpp-sensitive-clear",
-                file: info.path.clone(),
-                line: *line_num,
-                column: 1,
-                message: format!(
-                    "sensitive variable `{}` is freed/deleted without being securely zeroed — \
-                     residual data may remain in memory",
-                    var_name
-                ),
-                suggestion: Some(
-                    "Use `memset(ptr, 0, size)` or `std::fill(begin, end, 0)` before freeing. \
-                     For C++11+, use `SecureZeroMemory` or `explicit_bzero`. \
-                     Even better: use `std::vector<char>` with a custom allocator."
-                        .to_string(),
-                ),
-            });
         }
     }
 
