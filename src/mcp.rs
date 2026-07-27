@@ -1,6 +1,6 @@
 //! Raw JSON-RPC MCP server for cpp-guard.
 
-use crate::Scanner;
+use crate::{CppGuardConfig, Scanner};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::sync::Mutex;
@@ -63,7 +63,7 @@ fn handle_tool_call(id: Option<Value>, params: Option<Value>, scanner: &Mutex<Sc
             let path_str = args.get("project_path").and_then(|v| v.as_str()).unwrap_or(".");
             let path = std::path::Path::new(path_str);
             let mut s = scanner.lock().unwrap();
-            match s.scan(path) {
+            match s.scan(path, &CppGuardConfig::default()) {
                 Ok(report) => json!({"jsonrpc":"2.0","result":{"content":[{"type":"text","text":serde_json::to_string_pretty(&report).unwrap_or_default()}]},"id":id}),
                 Err(e) => json!({"jsonrpc":"2.0","result":{"content":[{"type":"text","text":format!("Error: {e}")}]},"id":id}),
             }

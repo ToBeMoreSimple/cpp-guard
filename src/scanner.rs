@@ -1,3 +1,4 @@
+use crate::config::CppGuardConfig;
 use crate::checks::{
     check_array_delete, check_cstyle_cast, check_delete_no_null, check_destructor_throw,
     check_empty_catch, check_format_string, check_memory_leak, check_nothrow_unchecked,
@@ -94,7 +95,7 @@ impl Scanner {
         Ok(Self { parser })
     }
 
-    pub fn scan(&mut self, project_root: &Path) -> Result<Report> {
+    pub fn scan(&mut self, project_root: &Path, config: &CppGuardConfig) -> Result<Report> {
         let project_name = project_root
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -119,7 +120,7 @@ impl Scanner {
             };
 
             let info = self.parse_file(entry.path().to_string_lossy().as_ref(), &source);
-            let issues = self.check_file(&info);
+            let issues = self.check_file(&info, config);
             report.stats.files_scanned += 1;
             all_infos.push((info, issues));
         }
@@ -326,69 +327,71 @@ impl Scanner {
         }
     }
 
-    pub fn check_file(&self, info: &FileInfo) -> Vec<Issue> {
+    pub fn check_file(&self, info: &FileInfo, config: &CppGuardConfig) -> Vec<Issue> {
         let mut issues = Vec::new();
 
         // 1. Memory leak: alloc without dealloc
-        issues.extend(check_memory_leak(info));
+        if !config.is_disabled("cpp-memory-leak") { issues.extend(check_memory_leak(info)); }
 
         // 2. Null pointer dereference
-        issues.extend(check_null_deref(info));
+        if !config.is_disabled("cpp-null-deref") { issues.extend(check_null_deref(info)); }
 
         // 3. Use after delete (no nullptr assign)
-        issues.extend(check_use_after_delete(info));
+        if !config.is_disabled("cpp-use-after-delete") { issues.extend(check_use_after_delete(info)); }
 
         // 4. C-style casts
-        issues.extend(check_cstyle_cast(info));
+        if !config.is_disabled("cpp-cstyle-cast") { issues.extend(check_cstyle_cast(info)); }
 
         // 5. Empty catch blocks
-        issues.extend(check_empty_catch(info));
+        if !config.is_disabled("cpp-empty-catch") { issues.extend(check_empty_catch(info)); }
 
         // 6. Destructor throws
-        issues.extend(check_destructor_throw(info));
+        if !config.is_disabled("cpp-destructor-throw") { issues.extend(check_destructor_throw(info)); }
 
         // 7. Sensitive data in prints — deduplicate by line
-        let mut seen_print_lines = std::collections::HashSet::new();
-        for p in &info.prints {
-            if p.is_sensitive && seen_print_lines.insert(p.line) {
-                issues.push(Issue {
-                    severity: Severity::Warning,
-                    check: "cpp-sensitive-print",
-                    file: info.path.clone(),
-                    line: p.line,
-                    column: 1,
-                    message: format!(
-                        "sensitive data appears in print/debug output: `{}` — passwords, tokens, or keys should never be logged",
-                        p.text
-                    ),
-                    suggestion: Some(
-                        "Redact or remove sensitive data from log output. Use placeholder text like `***` or hash the value before logging."
-                            .to_string(),
-                    ),
-                });
+        if !config.is_disabled("cpp-sensitive-print") {
+            let mut seen_print_lines = std::collections::HashSet::new();
+            for p in &info.prints {
+                if p.is_sensitive && seen_print_lines.insert(p.line) {
+                    issues.push(Issue {
+                        severity: Severity::Warning,
+                        check: "cpp-sensitive-print",
+                        file: info.path.clone(),
+                        line: p.line,
+                        column: 1,
+                        message: format!(
+                            "sensitive data appears in print/debug output: `{}` — passwords, tokens, or keys should never be logged",
+                            p.text
+                        ),
+                        suggestion: Some(
+                            "Redact or remove sensitive data from log output. Use placeholder text like `***` or hash the value before logging."
+                                .to_string(),
+                        ),
+                    });
+                }
             }
         }
 
         // 8. Delete without array form
-        issues.extend(check_delete_no_null(info));
+        if !config.is_disabled("cpp-delete-check") { issues.extend(check_delete_no_null(info)); }
 
         // 9. Array new[] with scalar delete
-        issues.extend(check_array_delete(info));
+        if !config.is_disabled("cpp-array-delete") { issues.extend(check_array_delete(info)); }
 
         // 10. Format string vulnerability
-        issues.extend(check_format_string(info));
+        if !config.is_disabled("cpp-format-string") { issues.extend(check_format_string(info)); }
 
         // 11. Path traversal
-        issues.extend(check_path_traversal(info));
+        if !config.is_disabled("cpp-path-traversal") { issues.extend(check_path_traversal(info)); }
 
         // 12. Sensitive data not cleared
-        issues.extend(check_sensitive_clear(info));
+        if !config.is_disabled("cpp-sensitive-clear") { issues.extend(check_sensitive_clear(info)); }
 
         // 13. nothrow new without null check
-        issues.extend(check_nothrow_unchecked(info));
+        if !config.is_disabled("cpp-nothrow-unchecked") { issues.extend(check_nothrow_unchecked(info)); }
 
         // 14. Unsafe C functions in C++ code
-        issues.extend(check_unsafe_c_func(info));
+        if !config.is_disabled("cpp-unsafe-c-func") { issues.extend(check_unsafe_c_func(info)); }
 
         issues
     }

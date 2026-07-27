@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use cpp_guard::{report::Severity, Scanner};
+use cpp_guard::{report::Severity, CppGuardConfig, Scanner};
 
 #[derive(Parser)]
 #[command(name = "cpp-guard", version, about = "Static analysis tool for C++ safety")]
@@ -16,6 +16,8 @@ enum Command {
         path: String,
         #[arg(long)]
         json: bool,
+        #[arg(long, value_delimiter = ',')]
+        disable: Vec<String>,
     },
     Mcp,
     Checks,
@@ -25,10 +27,17 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Scan { path, json } => {
+        Command::Scan { path, json, disable } => {
             let root = std::path::Path::new(&path).canonicalize()?;
             let mut scanner = Scanner::new()?;
-            let report = scanner.scan(&root)?;
+            let config = CppGuardConfig::load(&root)
+                .unwrap_or(CppGuardConfig {
+                    disabled_checks: vec![],
+                    severity_overrides: vec![],
+                    max_unsafe_lines: 10,
+                })
+                .with_disabled(&disable);
+            let report = scanner.scan(&root, &config)?;
 
             if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
