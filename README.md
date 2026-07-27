@@ -49,6 +49,24 @@ cpp-guard scan
 cpp-guard mcp
 ```
 
+## Configuration
+
+Create `.cppguard.toml` in your project root to customize behavior:
+
+```toml
+# Disable checks that don't apply to your project
+disabled_checks = [
+    "cpp-empty-catch",       # if using -fno-exceptions
+    "cpp-destructor-throw",  # if using -fno-exceptions
+]
+```
+
+Or pass on the command line:
+
+```bash
+cpp-guard scan --disable cpp-empty-catch,cpp-destructor-throw
+```
+
 ## License
 
 MIT
